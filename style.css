@@ -139,7 +139,7 @@ body::after {
   z-index: 1;
   max-width: 520px;
   margin: 0 auto;
-  padding: 40px 24px 100px;
+  padding: 40px 20px 100px;
 }
 
 /* ===== HEADER ===== */
@@ -1455,7 +1455,7 @@ body::after {
 /* ===== RESPONSIVENESS ===== */
 @media (max-width: 560px) {
   .app-container {
-    padding: 28px 18px 110px;
+    padding: 28px 20px 110px;
   }
 
   .greeting {

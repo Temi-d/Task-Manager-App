@@ -1,8 +1,20 @@
 // ===== STATE =====
 const STORAGE_KEY = 'ontrack_data';
+const JOURNAL_KEY = 'ontrack_journal';
 const PRIORITIES = { high: 'High', medium: 'Medium', low: 'Low' };
 const PRIORITY_ORDER = ['high', 'medium', 'low'];
-const PRIORITY_COLORS = { high: 'rose', medium: 'lavender', low: 'aqua' };
+const PRIORITY_COLORS = { high: 'high', medium: 'medium', low: 'low' };
+
+const CATEGORIES = [
+  { id: 'all', label: 'All Tasks', color: 'all' },
+  { id: 'work', label: 'Work', color: 'work' },
+  { id: 'health', label: 'Health', color: 'health' },
+  { id: 'personal-growth', label: 'Personal Growth', color: 'personal-growth' },
+  { id: 'finance', label: 'Finance', color: 'finance' },
+  { id: 'home', label: 'Home', color: 'home' },
+  { id: 'social', label: 'Social', color: 'social' },
+  { id: 'learning', label: 'Learning', color: 'learning' },
+];
 
 const state = {
   tasks: [],
@@ -11,6 +23,8 @@ const state = {
   calendarMonth: new Date().getMonth(),
   calendarYear: new Date().getFullYear(),
   selectedDate: formatDateKey(new Date()),
+  activeCategory: 'all',
+  journalOpen: true,
 };
 
 let newTaskPriority = 'medium';
@@ -66,6 +80,7 @@ const $modalClose    = document.getElementById('modal-close');
 const $modalTitle    = document.getElementById('modal-title');
 const $taskInput     = document.getElementById('task-input');
 const $taskDate      = document.getElementById('task-date');
+const $taskCategory  = document.getElementById('task-category');
 const $btnCancel     = document.getElementById('btn-cancel');
 const $btnAdd        = document.getElementById('btn-add');
 const $streakCount   = document.getElementById('streak-count');
@@ -77,6 +92,16 @@ const $popupOverlay  = document.getElementById('popup-overlay');
 const $popupClose    = document.getElementById('popup-close');
 const $popupBody     = document.getElementById('popup-body');
 const $btnGotIt      = document.getElementById('btn-got-it');
+const $sidenav       = document.getElementById('sidenav');
+const $sidenavOverlay = document.getElementById('sidenav-overlay');
+const $sidenavClose  = document.getElementById('sidenav-close');
+const $sidenavCats   = document.getElementById('sidenav-categories');
+const $hamburger     = document.getElementById('hamburger');
+const $journalTextarea = document.getElementById('journal-textarea');
+const $journalStatus = document.getElementById('journal-status');
+const $journalToggle  = document.getElementById('journal-toggle');
+const $journalBody   = document.getElementById('journal-body');
+const $journalToggleBtn = document.getElementById('journal-toggle-btn');
 
 // ===== STORAGE =====
 function saveState() {
@@ -95,6 +120,21 @@ function loadState() {
       const data = JSON.parse(raw);
       state.tasks = data.tasks || [];
       state.nextId = data.nextId || 1;
+    }
+  } catch (e) {}
+}
+
+function saveJournal() {
+  try {
+    localStorage.setItem(JOURNAL_KEY, $journalTextarea.value);
+  } catch (e) {}
+}
+
+function loadJournal() {
+  try {
+    const val = localStorage.getItem(JOURNAL_KEY);
+    if (val !== null) {
+      $journalTextarea.value = val;
     }
   } catch (e) {}
 }
@@ -146,7 +186,7 @@ function showUpcomingPopup(tasks) {
     const el = document.createElement('div');
     el.className = 'popup-task-item';
     const dateLabel = task.date === todayKey() ? 'Today' : 'Tomorrow';
-    const color = PRIORITY_COLORS[task.priority] || 'lavender';
+    const color = PRIORITY_COLORS[task.priority] || 'medium';
     el.innerHTML = `
       <div class="popup-task-info">
         <span class="popup-task-text">${escapeHtml(task.text)}</span>
@@ -198,7 +238,7 @@ function renderTomorrowPreview() {
 
   let html = `
     <div class="tomorrow-preview-header">
-      <span class="tomorrow-preview-icon">🔮</span>
+      <span class="tomorrow-preview-icon">Upcoming</span>
       <span class="tomorrow-preview-title">${dayName} — ${monthDay}</span>
       <span class="tomorrow-preview-count">${nextTasks.length} upcoming</span>
     </div>
@@ -211,7 +251,7 @@ function renderTomorrowPreview() {
       const color = PRIORITY_COLORS[p];
       html += `
         <div class="tomorrow-preview-item">
-          <span class="tomorrow-preview-bullet" style="background:var(--${color}-400)"></span>
+          <span class="tomorrow-preview-bullet" style="background:var(--${p === 'high' ? 'red' : p === 'medium' ? 'blue' : 'green'}-400)"></span>
           <span class="task-text">${escapeHtml(task.text)}</span>
           <span class="priority-badge priority-badge-${color}">${PRIORITIES[p]}</span>
         </div>
@@ -229,7 +269,7 @@ function renderUpcomingView() {
   const selected = new Date(state.selectedDate + 'T00:00:00');
   let html = `
     <div class="upcoming-view-header">
-      <span class="upcoming-view-icon">📅</span>
+      <span class="upcoming-view-icon">Next Days</span>
       <span class="upcoming-view-title">Next ${DAYS_SHOWN} Days</span>
       <span class="upcoming-view-count" id="upcoming-view-count"></span>
     </div>
@@ -255,7 +295,7 @@ function renderUpcomingView() {
     `;
 
     if (dayTasks.length === 0) {
-      html += `<div class="upcoming-day-empty">All caught up ✨</div>`;
+      html += `<div class="upcoming-day-empty">All caught up</div>`;
     } else {
       totalTasks += dayTasks.length;
       const groups = { high: [], medium: [], low: [] };
@@ -270,7 +310,7 @@ function renderUpcomingView() {
           const color = PRIORITY_COLORS[p];
           html += `
             <div class="upcoming-day-item">
-              <span class="upcoming-day-bullet" style="background:var(--${color}-400)"></span>
+              <span class="upcoming-day-bullet" style="background:var(--${p === 'high' ? 'red' : p === 'medium' ? 'blue' : 'green'}-400)"></span>
               <span class="task-text">${escapeHtml(task.text)}</span>
               <span class="priority-badge priority-badge-${color}">${PRIORITIES[p]}</span>
             </div>
@@ -297,13 +337,73 @@ function setNavActive(action) {
   });
 }
 
+// ===== SIDE NAV =====
+function renderCategories() {
+  $sidenavCats.innerHTML = '';
+  CATEGORIES.forEach(cat => {
+    const el = document.createElement('div');
+    el.className = 'category-item';
+    if (cat.id === state.activeCategory) el.classList.add('active');
+    el.dataset.category = cat.id;
+
+    const count = cat.id === 'all'
+      ? state.tasks.length
+      : state.tasks.filter(t => (t.category || 'none') === cat.id).length;
+
+    el.innerHTML = `
+      <span class="category-dot category-dot-${cat.color}"></span>
+      <span>${cat.label}</span>
+      <span class="category-count">${count}</span>
+    `;
+
+    el.addEventListener('click', () => {
+      state.activeCategory = cat.id;
+      renderCategories();
+      renderTasks();
+      closeSidenav();
+    });
+
+    $sidenavCats.appendChild(el);
+  });
+}
+
+function openSidenav() {
+  $sidenav.classList.add('open');
+  $sidenavOverlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+
+function closeSidenav() {
+  $sidenav.classList.remove('open');
+  $sidenavOverlay.classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// ===== JOURNAL =====
+function toggleJournal() {
+  state.journalOpen = !state.journalOpen;
+  $journalBody.classList.toggle('collapsed', !state.journalOpen);
+  $journalToggleBtn.classList.toggle('open', state.journalOpen);
+}
+
+function updateJournalStatus() {
+  $journalStatus.textContent = 'Auto-saved';
+  clearTimeout(window._journalTimer);
+  window._journalTimer = setTimeout(() => {
+    $journalStatus.textContent = 'Auto-saved';
+  }, 2000);
+  $journalStatus.textContent = 'Saving...';
+}
+
 // ===== INIT =====
 function init() {
   loadState();
   renderDate();
   renderStreak();
   renderCalendar();
+  renderCategories();
   renderTasks();
+  loadJournal();
   bindEvents();
   checkUpcomingTasks();
 }
@@ -415,7 +515,9 @@ function closeCalendar() {
 
 // ===== TASKS =====
 function getFilteredTasks() {
-  return state.tasks.filter(t => t.date === state.selectedDate);
+  const dateTasks = state.tasks.filter(t => t.date === state.selectedDate);
+  if (state.activeCategory === 'all') return dateTasks;
+  return dateTasks.filter(t => (t.category || 'none') === state.activeCategory);
 }
 
 function renderTasks() {
@@ -494,6 +596,7 @@ function renderTasks() {
   updateCounts();
   renderStreak();
   renderTomorrowPreview();
+  renderCategories();
 
   const isUpcoming = document.querySelector('.nav-item[data-action="upcoming"]').classList.contains('active');
   if (isUpcoming) {
@@ -513,11 +616,13 @@ function updateCounts() {
 }
 
 function addTask(text, date, priority) {
+  const category = $taskCategory.value;
   state.tasks.push({
     id: state.nextId++,
     text: text.trim(),
     date,
     priority: priority || 'medium',
+    category: category === 'none' ? '' : category,
     done: false,
   });
   renderTasks();
@@ -528,9 +633,11 @@ function addTask(text, date, priority) {
 function editTask(id, text, date, priority) {
   const task = state.tasks.find(t => t.id === id);
   if (!task) return;
+  const category = $taskCategory.value;
   task.text = text.trim();
   task.date = date;
   task.priority = priority || 'medium';
+  task.category = category === 'none' ? '' : category;
   renderTasks();
   renderCalendar();
   saveState();
@@ -582,6 +689,7 @@ function openAddModal() {
   $modalTitle.textContent = 'New Task';
   $btnAdd.textContent = 'Add Task';
   $taskDate.value = state.selectedDate;
+  $taskCategory.value = 'none';
   $taskInput.value = '';
   $btnAdd.disabled = true;
   setPriority('medium');
@@ -596,6 +704,7 @@ function openEditModal(id) {
   $modalTitle.textContent = 'Edit Task';
   $btnAdd.textContent = 'Save Changes';
   $taskDate.value = task.date;
+  $taskCategory.value = task.category || 'none';
   $taskInput.value = task.text;
   $btnAdd.disabled = false;
   setPriority(task.priority || 'medium');
@@ -635,6 +744,11 @@ function bindEvents() {
   $calPrev.addEventListener('click', prevMonth);
   $calNext.addEventListener('click', nextMonth);
 
+  // Side nav
+  $hamburger.addEventListener('click', openSidenav);
+  $sidenavClose.addEventListener('click', closeSidenav);
+  $sidenavOverlay.addEventListener('click', closeSidenav);
+
   // Bottom nav
   $navBtns.forEach(btn => {
     btn.addEventListener('click', () => {
@@ -657,6 +771,14 @@ function bindEvents() {
       }
       if (action === 'calendar') {
         toggleCalendar();
+        return;
+      }
+      if (action === 'journal') {
+        closeCalendar();
+        setNavActive('journal');
+        hideUpcomingView();
+        // Scroll to journal section
+        document.getElementById('journal-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
         return;
       }
       if (action === 'upcoming') {
@@ -720,6 +842,7 @@ function bindEvents() {
     if (e.key === 'Escape') {
       closeModal();
       closePopup();
+      closeSidenav();
     }
   });
 
@@ -733,6 +856,23 @@ function bindEvents() {
   $btnGotIt.addEventListener('click', closePopup);
   $popupOverlay.addEventListener('click', (e) => {
     if (e.target === $popupOverlay) closePopup();
+  });
+
+  // Journal
+  $journalToggle.addEventListener('click', toggleJournal);
+  $journalToggleBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleJournal();
+  });
+
+  let journalSaveTimer;
+  $journalTextarea.addEventListener('input', () => {
+    clearTimeout(journalSaveTimer);
+    $journalStatus.textContent = 'Unsaved changes';
+    journalSaveTimer = setTimeout(() => {
+      saveJournal();
+      $journalStatus.textContent = 'Auto-saved';
+    }, 600);
   });
 }
 
